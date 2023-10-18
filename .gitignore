@@ -1,0 +1,7 @@
+data/*
+models/*
+outputs/*
+const_machine_assignments.txt
+wandb/*
+scripts/*
+__pycache__/*
