@@ -747,11 +747,11 @@ class CreateConstituencySuite():
 
             if int(alt1[1]) == 0 or int(alt2[1]) == 0: # grammatically incorrect sentences
                 continue
-            if self._args.type == 'test' and self._args.type == 'test_seen' and (self._args.output_b == "do" or self._args.output_b == "po"):
+            if (self._args.type == 'test' or self._args.type == 'test_seen') and (self._args.output_b == "do" or self._args.output_b == "po"):
                 if alt1[0] == "spray":
                     continue
             
-            if self._args.type == 'test' and self._args.type == 'test_seen' and (self._args.output_b == "loc" or self._args.output_b == "in"):
+            if (self._args.type == 'test' or self._args.type == 'test_seen') and (self._args.output_b == "loc" or self._args.output_b == "in"):
                 if alt1[0] == "dat":
                     continue
 
