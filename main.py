@@ -7,6 +7,7 @@ import time
 import logging
 from tqdm import tqdm, trange
 import argparse
+import random
 from transformers import AutoModelForMaskedLM, AutoModelForCausalLM, AutoConfig, AutoModel, AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 from nltk.translate import bleu_score, meteor_score
@@ -36,10 +37,10 @@ parser.add_argument('--load-checkpoint', type=str, default=None, help='load chec
 parser.add_argument('--random_seed', type=int, default=13370, help='random seed')
 parser.add_argument('--numpy_seed', type=int, default=1337, help='numpy random seed')
 parser.add_argument('--torch_seed', type=int, default=133, help='pytorch random seed')
-parser.add_argument('--lr', type=float, default=3e-4, help='Learning rate')
+parser.add_argument('--lr', type=float, default=3e-5, help='Learning rate')
 parser.add_argument('--grad-clip', type=float, default=0.25, help='Gradient clipping')
 parser.add_argument('--batch-size', type=int, default=32, help='Batch Size')
-parser.add_argument('--epochs', type=int, default=10, help='Epochs')
+parser.add_argument('--epochs', type=int, default=5, help='Epochs')
 parser.add_argument('--gpu', type=int, default=0, help='GPU id')
 parser.add_argument('--max-source-length', type=int, default=30, help='Maxlen for input sentences')
 parser.add_argument('--max-target-length', type=int, default=30, help='Maxlen for output sentences')
@@ -51,6 +52,7 @@ parser.add_argument('--no-cuda', action='store_true', help='use this flag for no
 parser.add_argument('--held-out', action='store_true', help='target transformation is held out or not')
 parser.add_argument('--save', type=str, default='outputs/', help='output directory')
 parser.add_argument("--do-train", action='store_true', help="Whether to run training.")
+parser.add_argument("--test-seen", action='store_true', help="Whether to run on observed test set.")
 parser.add_argument('--fp16', action='store_true', help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit")
 parser.add_argument("--warmup-steps", default=100, type=int, help="Linear warmup over warmup_steps.")
 parser.add_argument('--gradient-accumulation-steps', type=int, default=1, help="Number of updates steps to accumulate before performing a backward/update pass.")
@@ -74,12 +76,30 @@ config = AutoConfig.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSeq2SeqLM.from_pretrained(model_name, config=config).to(device)
 
+def set_seed(args, n_gpu):
+    random.seed(args.random_seed)
+    np.random.seed(args.numpy_seed)
+    torch.manual_seed(args.torch_seed)
+    if n_gpu > 0:
+        torch.cuda.manual_seed_all(args.torch_seed)
 
-with open(os.path.join(args.data, 'processed_train_' + args.output_b + '_' + str(args.held_out) + '.tsv'), 'r') as f:
-    train_sentences = f.read().strip().split('\n')
-with open(os.path.join(args.data, 'processed_test_'+ args.output_nb + '_' + args.output_b + '.tsv'), 'r') as f:
-    test_sentences = f.read().strip().split('\n')
-with open(os.path.join(args.data, 'processed_dev_' + args.output_b + '_' + str(args.held_out) + '.tsv'), 'r') as f:
+set_seed(args, n_gpu)
+
+if not args.held_out:
+    with open(os.path.join(args.data, 'processed_train' + '.tsv'), 'r') as f:
+        train_sentences = f.read().strip().split('\n')
+        random.shuffle(train_sentences)
+else:
+    with open(os.path.join(args.data, 'processed_train_' + args.output_b + '.tsv'), 'r') as f:
+        train_sentences = f.read().strip().split('\n')
+if args.test_seen:
+    with open(os.path.join(args.data, 'processed_test_seen_'+ args.output_nb + '_' + args.output_b + '.tsv'), 'r') as f:
+        test_sentences = f.read().strip().split('\n')
+else:
+    with open(os.path.join(args.data, 'processed_test_'+ args.output_nb + '_' + args.output_b + '.tsv'), 'r') as f:
+        test_sentences = f.read().strip().split('\n')
+    
+with open(os.path.join(args.data, 'processed_dev_' + args.output_b + '.tsv'), 'r') as f:
     val_sentences = f.read().strip().split('\n')
 
 
@@ -110,6 +130,7 @@ test_x, test_y, test_head_x, test_head_y, test_head_map_x, test_head_map_y = get
 val_x, val_y, val_head_x, val_head_y, val_head_map_x, val_head_map_y = get_sentence_lists(val_sentences)
 
 if args.model_type == "hw":
+    print('yo')
     train_x = train_head_x
     train_y = train_head_y
     test_x = test_head_x
@@ -186,6 +207,14 @@ eval = Evaluate()
 
 model = model.to(args.device)
 
+logger.info("Creating the test dataset")
+tokenized_test_source = tokenize_lists_of_sentences(test_x)
+tokenized_test_target = tokenize_lists_of_sentences(test_y)
+tokenized_test_source_input_ids, tokenized_test_source_attention_mask = tokenized_test_source.input_ids, tokenized_test_source.attention_mask
+tokenized_test_target_input_ids = tokenized_test_target.input_ids
+tokenized_test_target_input_ids[tokenized_test_target_input_ids == tokenizer.pad_token_id] = -100
+tokenized_test_source_input_ids, tokenized_test_source_attention_masks, tokenized_test_target_input_ids= generate_batches(tokenized_test_source_input_ids, tokenized_test_source_attention_mask, tokenized_test_target_input_ids, args.batch_size)
+
 if args.do_train:
 
     logger.info("Creating the training dataset")
@@ -196,15 +225,6 @@ if args.do_train:
     tokenized_train_target_input_ids[tokenized_train_target_input_ids == tokenizer.pad_token_id] = -100
     tokenized_train_source_input_ids, tokenized_train_source_attention_masks, tokenized_train_target_input_ids= generate_batches(tokenized_train_source_input_ids, tokenized_train_source_attention_mask, tokenized_train_target_input_ids, args.batch_size)
     
-    logger.info("Creating the test dataset")
-    tokenized_test_source = tokenize_lists_of_sentences(test_x)
-    tokenized_test_target = tokenize_lists_of_sentences(test_y)
-    tokenized_test_source_input_ids, tokenized_test_source_attention_mask = tokenized_test_source.input_ids, tokenized_test_source.attention_mask
-    tokenized_test_target_input_ids = tokenized_test_target.input_ids
-    tokenized_test_target_input_ids[tokenized_test_target_input_ids == tokenizer.pad_token_id] = -100
-    tokenized_test_source_input_ids, tokenized_test_source_attention_masks, tokenized_test_target_input_ids= generate_batches(tokenized_test_source_input_ids, tokenized_test_source_attention_mask, tokenized_test_target_input_ids, args.batch_size)
-
-
     logger.info("Creating the dev dataset")
     tokenized_val_source = tokenize_lists_of_sentences(val_x)
     tokenized_val_target = tokenize_lists_of_sentences(val_y)
@@ -320,6 +340,7 @@ with torch.no_grad():
         
     predictions_table = wandb.Table(columns=["src", "predictions", "target"], data=predictions_data)
     wandb.log({"Predictions": predictions_table})
-        
-logger.info("Epoch %d: - test loss: %.4f - test bleu: %.4f - test meteor: %.4f - test ed: %.4f\n" % (epoch_idx, np.average(test_loss), bleu, meteor, ed))
+
+logger.info("*"*89)      
+logger.info("Test loss: %.4f - test bleu: %.4f - test meteor: %.4f - test ed: %.4f\n" % (np.average(test_loss), bleu, meteor, ed))
 wandb.finish()

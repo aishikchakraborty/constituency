@@ -146,13 +146,11 @@ def sample_dataset(text, parse, tense, total_samples=10000000000):
 
 
 def get_head_words_and_constituents(dp, sentence):
-    # print(sentence)
-    # print(dp)
-    # for i in output['sentences']: # not sure if there can be multiple items here. If so, it just returns the first one currently.
-    #     return [tuple((dep['dep'], dep['governorGloss'], dep['dependentGloss'])) for dep in i['basicDependencies']]
+    #  do_head : direct object head
+    #  io_head : indirect object head
     tokens = sentence.split()
     
-    
+    # all possible connectors
     connectors = ['to', 'on', 'in', 'onto', 'into', 'with']
     connector_head = ""
     
@@ -166,7 +164,8 @@ def get_head_words_and_constituents(dp, sentence):
         if dep[1] == "it":
             is_cl = 1
         break
-    for dep in dp:
+    for dep in dp: # sometimes verb heads are classified incorrectly
+                   # some of these cases are addressed here
         if dep[2] == "acl:relcl" and is_cl == 1 :  
             verb_heads.append(dep[1])
         elif dep[2] == "flat":
@@ -183,7 +182,7 @@ def get_head_words_and_constituents(dp, sentence):
         else:
             verb_head = verb_heads[0]
         
-    # breakpoint()
+    # print(sentence)
     subjs = []
     for dep in dp:
         if is_wh == 1:
@@ -211,11 +210,10 @@ def get_head_words_and_constituents(dp, sentence):
             object_heads.append(dep[1])
         if is_wh == 1 and dep[2] == "advmod":
             object_heads.append(dep[1])
-        if dep[2] == "obj" or dep[2] == 'obl:npmod' or dep[2] == "ccomp":
+        if dep[2] == "obj" or dep[2] == 'obl:npmod' or dep[2] == "ccomp" or dep[2]=='obl:tmod':
             object_heads.append(dep[1])
     
-    # if sentence == "where did jason  brush the  box into .":
-    #     breakpoint()
+    
 
     do_head = object_heads[0]
     
@@ -224,11 +222,11 @@ def get_head_words_and_constituents(dp, sentence):
     if len(object_heads) > 1:
         io_head = object_heads[1]
         for dep in dp:
-            if dep[2] == "obl" or dep[2] == "obl:tmod": # double object containing a prepositional object
+            if dep[2] == "obl": # double object containing a prepositional object
                 obl_idx = tokens.index(dep[1])
-                io_idx = tokens.index(io_head)
-                if obl_idx < io_idx :
-                    attachment_idx = obl_idx # this object attaches to the direct object
+                # io_idx = tokens.index(io_head)
+                # if obl_idx < io_idx :
+                attachment_idx = obl_idx # this object attaches to the direct object
                 break
     else:
         for dep in dp:
@@ -261,7 +259,7 @@ def get_head_words_and_constituents(dp, sentence):
                     do_head = io_head
                     io_head = temp
                 break
-    
+        
     for dep in dp:
         if dep[2] == "punct":
             punct = dep[1]
@@ -284,35 +282,35 @@ def get_head_words_and_constituents(dp, sentence):
             current_phrase = tokens[i] + ' '
         if t == subj_head or t == verb_head:
             if i != 0:
-                current_phrase += t
-            constituents.append(current_phrase)
+                current_phrase += t + ' '
+            constituents.append(current_phrase.strip())
             head_words.append(t)
             head_words_map[t] = current_phrase
             current_phrase = ''
         elif t == do_head:
             if i != 0:
-                current_phrase += t
+                current_phrase += t + ' '
             if attachment_idx == -1:
-                constituents.append(current_phrase)
+                constituents.append(current_phrase.strip())
             
                 head_words.append(t)
                 head_words_map[t] = current_phrase
             else:
-                current_phrase += ' ' + ' '.join(tokens[i+1:attachment_idx+1])
+                current_phrase += ' '.join(tokens[(i+1):(attachment_idx+1)])
                 ignore_tokens_start = i+1
-                constituents.append(current_phrase)
+                constituents.append(current_phrase.strip())
                 head_words.append(t)
                 head_words_map[t] = current_phrase
             current_phrase = ''
             
         elif t == io_head:
-            current_phrase += ' ' +  ' '.join(tokens[i:-1])
+            current_phrase += ' '.join(tokens[i:-1])
             head_words.append(io_head)
             head_words_map[io_head] = current_phrase
-            constituents.append(current_phrase)
+            constituents.append(current_phrase.strip())
         
         elif t == connector_head:
-            constituents.append(connector_head)
+            constituents.append(connector_head.strip())
             current_phrase = ''
             head_words.append(t)
             head_words_map[t] = t
@@ -321,7 +319,7 @@ def get_head_words_and_constituents(dp, sentence):
             if ignore_tokens_start  == -1:
                 current_phrase += t + ' '
             else:
-                if i >= ignore_tokens_start and i < attachment_idx+1:
+                if i >= ignore_tokens_start and i < (attachment_idx+1):
                     continue 
                 else:
                     current_phrase += t + ' '
@@ -330,6 +328,8 @@ def get_head_words_and_constituents(dp, sentence):
     constituents.append(punct)
     head_words.append(punct)
     head_words_map[punct] = punct
+    # if sentence == "michael passed the person across the table the salt .":
+    #     breakpoint()
     
     return head_words, head_words_map, constituents
 
