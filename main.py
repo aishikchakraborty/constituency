@@ -283,7 +283,7 @@ if args.do_train:
             model.eval()
             for j in trange(num_dev_batches):
                 loss = model(input_ids=tokenized_val_source_input_ids[j], attention_mask=tokenized_val_source_attention_masks[j], labels=tokenized_val_target_input_ids[j]).loss
-                output = model.generate(input_ids=tokenized_val_source_input_ids[j], attention_mask=tokenized_val_source_attention_masks[j], max_length = args.max_target_length, num_beams=4)
+                output = model.generate(input_ids=tokenized_val_source_input_ids[j], attention_mask=tokenized_val_source_attention_masks[j], max_length = args.max_target_length, num_beams=1, do_sample=False)
              
                 _pred = tokenizer.batch_decode(output, skip_special_tokens=True)
                 tokenized_val_target_input_ids[j][tokenized_val_target_input_ids[j] == -100] = tokenizer.pad_token_id
@@ -320,7 +320,7 @@ test_src = []
 with torch.no_grad():
     for j in trange(num_test_batches):
         loss = model(input_ids=tokenized_test_source_input_ids[j], attention_mask=tokenized_test_source_attention_masks[j], labels=tokenized_test_target_input_ids[j]).loss
-        output = model.generate(input_ids=tokenized_test_source_input_ids[j], attention_mask=tokenized_test_source_attention_masks[j], max_length = args.max_target_length, num_beams=4)
+        output = model.generate(input_ids=tokenized_test_source_input_ids[j], attention_mask=tokenized_test_source_attention_masks[j], max_length = args.max_target_length, num_beams=1, do_sample=False)
         
         _pred = tokenizer.batch_decode(output, skip_special_tokens=True)
         tokenized_test_target_input_ids[j][tokenized_test_target_input_ids[j] == -100] = tokenizer.pad_token_id
