@@ -5,3 +5,4 @@ const_machine_assignments.txt
 wandb/*
 scripts/*
 __pycache__/*
+old_code/*

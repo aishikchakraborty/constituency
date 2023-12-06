@@ -380,7 +380,7 @@ class CreateConstituencySuite():
             io_proform_hw[2] = transformation_hw
             io_proform_hw[3] = ' '.join(io_hw)
             
-            del io_proform_hw_map[head_words[3]]
+            del io_proform_hw_map[head_words[2]]
             io_proform_hw_map[transformation_hw] = transformation
 
             # DO PROFORM
@@ -400,7 +400,7 @@ class CreateConstituencySuite():
             do_proform_hw[2] = do_hw
             do_proform_hw[3] = transformation_hw
             
-            del do_proform_hw_map[head_words[2]]
+            del do_proform_hw_map[head_words[3]]
             do_proform_hw_map[transformation_hw] = transformation
 
 
@@ -475,7 +475,7 @@ class CreateConstituencySuite():
             do_wh_hw[4] = ' '.join(io_hw)
             
             del do_wh_hw_map[head_words[1]] # delete verb 
-            do_wh_hw_map[do_wh_hw[2]] = do_hw[2] # verbs are a single token in dataset
+            do_wh_hw_map[do_wh_hw[2]] = do_wh_hw[2] # verbs are a single token in dataset
             del do_wh_hw_map[head_words[2]]
             do_wh_hw_map[transformation_hw] = transformation
 
@@ -501,7 +501,7 @@ class CreateConstituencySuite():
             io_wh_hw[4] = connector_hw
             
             del io_wh_hw_map[head_words[1]] # delete verb 
-            io_wh_hw_map[io_wh_hw[2]] = io_wh[2] # verbs are a single token in dataset
+            io_wh_hw_map[io_wh_hw[2]] = io_wh_hw[2] # verbs are a single token in dataset
             del io_wh_hw_map[head_words[4]]
             io_wh_hw_map[transformation_hw] = transformation
 
@@ -561,7 +561,7 @@ class CreateConstituencySuite():
                 do_wh_hw[4] = connector_hw
                 
                 del do_wh_hw_map[head_words[1]] # delete verb 
-                do_wh_hw_map[do_wh_hw[2]] = do_hw[2] # verbs are a single token in dataset, include lemmatized verb
+                do_wh_hw_map[do_wh_hw[2]] = do_wh_hw[2] # verbs are a single token in dataset, include lemmatized verb
                 del do_wh_hw_map[head_words[4]]
                 do_wh_hw_map[transformation_hw] = transformation
             
@@ -585,7 +585,7 @@ class CreateConstituencySuite():
                 do_wh_hw[4] = ' '.join(io_hw)
                 
                 del do_wh_hw_map[head_words[1]] # delete verb 
-                do_wh_hw_map[do_wh_hw[2]] = do_hw[2] # verbs are a single token in dataset
+                do_wh_hw_map[do_wh_hw[2]] = do_wh_hw[2] # verbs are a single token in dataset
                 del do_wh_hw_map[head_words[2]]
                 do_wh_hw_map[transformation_hw] = transformation
             
@@ -610,7 +610,7 @@ class CreateConstituencySuite():
                 io_wh_hw[4] = ''
                 
                 del io_wh_hw_map[head_words[1]] # delete verb 
-                io_wh_hw_map[io_wh_hw[2]] = io_wh[2] # verbs are a single token in dataset
+                io_wh_hw_map[io_wh_hw[2]] = io_wh_hw[2] # verbs are a single token in dataset
                 del io_wh_hw_map[head_words[3]]
                 
             else:
@@ -630,7 +630,7 @@ class CreateConstituencySuite():
                 io_wh_hw[4] = connector_hw
                 
                 del io_wh_hw_map[head_words[1]] # delete verb 
-                io_wh_hw_map[io_wh_hw[2]] = io_wh[2] # verbs are a single token in dataset
+                io_wh_hw_map[io_wh_hw[2]] = io_wh_hw[2] # verbs are a single token in dataset
                 del io_wh_hw_map[head_words[4]]
                 io_wh_hw_map[transformation_hw] =  transformation
                 
@@ -685,7 +685,7 @@ class CreateConstituencySuite():
             io_wh_hw[3] = ' '.join(io_hw)
             
             del io_wh_hw_map[head_words[1]] # delete verb 
-            io_wh_hw_map[io_wh_hw[2]] = io_wh[2] # verbs are a single token in dataset
+            io_wh_hw_map[io_wh_hw[2]] = io_wh_hw[2] # verbs are a single token in dataset
             del io_wh_hw_map[head_words[2]]
             io_wh_hw_map[transformation_hw] = transformation
 
@@ -708,7 +708,7 @@ class CreateConstituencySuite():
             do_wh_hw[3] = do_hw
             
             del do_wh_hw_map[head_words[1]] # delete verb 
-            do_wh_hw_map[do_wh_hw[2]] = do_hw[2] # verbs are a single token in dataset
+            do_wh_hw_map[do_wh_hw[2]] = do_wh_hw[2] # verbs are a single token in dataset
             del do_wh_hw_map[head_words[3]]
             do_wh_hw_map[transformation_hw] = transformation
 

@@ -8,7 +8,7 @@ import logging
 from tqdm import tqdm, trange
 import argparse
 import random
-from transformers import AutoModelForMaskedLM, AutoModelForCausalLM, AutoConfig, AutoModel, AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
+from transformers import AutoConfig, AutoTokenizer, AutoModelForSeq2SeqLM, BartForConditionalGeneration
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 from nltk.translate import bleu_score, meteor_score
 from nltk.metrics.distance import edit_distance
@@ -31,8 +31,8 @@ parser = argparse.ArgumentParser(description='Generation Project Main')
 parser.add_argument('--data', type=str, default='data/', help='location of the data corpus')
 parser.add_argument('--output-b', type=str, default='do', help='base transformations')
 parser.add_argument('--output-nb', type=str, default='cleft', help='non-base transformations')
-parser.add_argument('--model-type', type=str, default='normal', help='tk (tokens)|hw (head words)')
-parser.add_argument('--plm-type', type=str, default='', help='type of model BART|T5|GPT-2')
+parser.add_argument('--model-type', type=str, default='normal', help='normal (tokens)|hw (head words)')
+parser.add_argument('--plm-type', type=str, default='', help='type of model BART|T5|')
 parser.add_argument('--load-checkpoint', type=str, default=None, help='load checkpoint for finetuning')
 parser.add_argument('--random_seed', type=int, default=13370, help='random seed')
 parser.add_argument('--numpy_seed', type=int, default=1337, help='numpy random seed')
@@ -42,8 +42,8 @@ parser.add_argument('--grad-clip', type=float, default=0.25, help='Gradient clip
 parser.add_argument('--batch-size', type=int, default=32, help='Batch Size')
 parser.add_argument('--epochs', type=int, default=5, help='Epochs')
 parser.add_argument('--gpu', type=int, default=0, help='GPU id')
-parser.add_argument('--max-source-length', type=int, default=30, help='Maxlen for input sentences')
-parser.add_argument('--max-target-length', type=int, default=30, help='Maxlen for output sentences')
+parser.add_argument('--max-source-length', type=int, default=100, help='Maxlen for input sentences')
+parser.add_argument('--max-target-length', type=int, default=100, help='Maxlen for output sentences')
 parser.add_argument('--top-k', type=int, default=5, help='Top-k sampling')
 parser.add_argument('--top-p', type=float, default=0.9, help='Nucleus sampling')
 parser.add_argument('--temp', type=float, default=5, help='Softmax Temperature')
@@ -74,7 +74,10 @@ model_name = MODEL_NAMES[args.plm_type]
 
 config = AutoConfig.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(model_name, config=config).to(device)
+if args.plm_type == 't5': 
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name, config=config).to(device)
+elif args.plm_type == 'bart':
+    model = BartForConditionalGeneration.from_pretrained(model_name, config=config).to(device)
 
 def set_seed(args, n_gpu):
     random.seed(args.random_seed)
@@ -130,11 +133,10 @@ test_x, test_y, test_head_x, test_head_y, test_head_map_x, test_head_map_y = get
 val_x, val_y, val_head_x, val_head_y, val_head_map_x, val_head_map_y = get_sentence_lists(val_sentences)
 
 if args.model_type == "hw":
-    print('yo')
     train_x = train_head_x
     train_y = train_head_y
     test_x = test_head_x
-    test_y = test_head_y
+    # test_y = test_head_y
     val_x = val_head_x
     val_y = val_head_y
 
@@ -160,6 +162,26 @@ def generate_batches(tokenized_source_input_ids, tokenized_source_attention_mask
     batched_tokenized_target_input_ids = [tokenized_target_input_ids[i * batch_size : (i+1) * batch_size] for i in range(num_batches)]
     return batched_tokenized_source_input_ids, batched_tokenized_source_attention_masks, batched_tokenized_target_input_ids
     
+def generate_text_from_hw(sent, hw_map):
+    expanded_sent = []
+    expanded_phrase = ''
+    # breakpoint()
+    for i, token in enumerate(sent):
+        if token in hw_map.keys():
+            if len(expanded_phrase) > 0:
+                expanded_sent.append(expanded_phrase.strip())
+                expanded_phrase = ''
+            expanded_sent.append(hw_map[token].strip())
+        elif (expanded_phrase + token).strip() in hw_map.keys():
+            expanded_sent.append(hw_map[(expanded_phrase + token).strip()])
+            expanded_phrase = ''
+        else:
+            expanded_phrase += token + ' '
+    if len(expanded_phrase) > 0:
+        expanded_sent.append(expanded_phrase.strip())
+    expanded_sent[-2] += expanded_sent[-1]   # dealing with punctuation correctly
+    return ' '.join(expanded_sent[:-1])
+
 
 class Evaluate:
     def __init__(
@@ -216,7 +238,6 @@ tokenized_test_target_input_ids[tokenized_test_target_input_ids == tokenizer.pad
 tokenized_test_source_input_ids, tokenized_test_source_attention_masks, tokenized_test_target_input_ids= generate_batches(tokenized_test_source_input_ids, tokenized_test_source_attention_mask, tokenized_test_target_input_ids, args.batch_size)
 
 if args.do_train:
-
     logger.info("Creating the training dataset")
     tokenized_train_source = tokenize_lists_of_sentences(train_x)
     tokenized_train_target = tokenize_lists_of_sentences(train_y)
@@ -251,11 +272,12 @@ if args.do_train:
 
     
     for epoch_idx in trange(args.epochs):
-        optimizer.zero_grad()
-        train_loss = []
         
+        train_loss = []
+        model.train()
 
         for i in tqdm(range(num_batches)):
+            optimizer.zero_grad()
             output = model(input_ids=tokenized_train_source_input_ids[i], attention_mask=tokenized_train_source_attention_masks[i], labels=tokenized_train_target_input_ids[i])
             loss = output.loss
             loss = loss / args.gradient_accumulation_steps
@@ -270,20 +292,16 @@ if args.do_train:
             
             if i%200==0:
                 logger.info("Epoch %d: - train loss: %.4f \n" % (epoch_idx, np.average(train_loss)*args.gradient_accumulation_steps))
-                train_loss = []
                 
         dev_loss = []
-        dev_bleu = []
-        dev_meteor = []
-        dev_ed = []
-
+        
         pred = []
         labels = []
         with torch.no_grad():
             model.eval()
             for j in trange(num_dev_batches):
                 loss = model(input_ids=tokenized_val_source_input_ids[j], attention_mask=tokenized_val_source_attention_masks[j], labels=tokenized_val_target_input_ids[j]).loss
-                output = model.generate(input_ids=tokenized_val_source_input_ids[j], attention_mask=tokenized_val_source_attention_masks[j], max_length = args.max_target_length, num_beams=1, do_sample=False)
+                output = model.generate(input_ids=tokenized_val_source_input_ids[j], attention_mask=tokenized_val_source_attention_masks[j], max_length = args.max_target_length, num_beams=1, do_sample=False, early_stopping=False)
              
                 _pred = tokenizer.batch_decode(output, skip_special_tokens=True)
                 tokenized_val_target_input_ids[j][tokenized_val_target_input_ids[j] == -100] = tokenizer.pad_token_id
@@ -300,14 +318,18 @@ if args.do_train:
                 dev_best_bleu = bleu
                 torch.save(model.state_dict(), model_save_name)
             logger.info("Epoch %d: - dev loss: %.4f - dev bleu: %.4f - dev meteor: %.4f - dev ed: %.4f\n" % (epoch_idx, np.average(dev_loss), bleu, meteor, ed))
-
+            dev_loss = []
+            
     
 test_loss = []
 pred = []
 labels = []
 if args.load_checkpoint == None:
     del model
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name, config=config).to(device)
+    if args.plm_type == 't5': 
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name, config=config).to(device)
+    elif args.plm_type == 'bart':
+        model = BartForConditionalGeneration.from_pretrained(model_name, config=config).to(device)
     model.load_state_dict(torch.load(model_save_name))
 else:
     model.load_state_dict(torch.load(args.load_checkpoint))
@@ -317,14 +339,23 @@ num_test_batches = len(tokenized_test_source_input_ids)
 
 predictions_data = []
 test_src = []
+num_batches = len(test_head_map_y)//args.batch_size 
+batched_hw_map = [test_head_map_y[i * args.batch_size : (i+1) * args.batch_size] for i in range(num_batches)]
 with torch.no_grad():
     for j in trange(num_test_batches):
         loss = model(input_ids=tokenized_test_source_input_ids[j], attention_mask=tokenized_test_source_attention_masks[j], labels=tokenized_test_target_input_ids[j]).loss
-        output = model.generate(input_ids=tokenized_test_source_input_ids[j], attention_mask=tokenized_test_source_attention_masks[j], max_length = args.max_target_length, num_beams=1, do_sample=False)
+        output = model.generate(input_ids=tokenized_test_source_input_ids[j], attention_mask=tokenized_test_source_attention_masks[j], max_length = args.max_target_length, num_beams=1, do_sample=False, early_stopping=False)
         
         _pred = tokenizer.batch_decode(output, skip_special_tokens=True)
+        if args.model_type == "hw":
+            print(_pred[:5])
+            print(batched_hw_map[j][:5])
+            _pred = [generate_text_from_hw((_pred[k])[:-1].split() + ['.'], batched_hw_map[j][k]) for k in range(len(_pred))]
+            print(_pred[:5])
+            
         tokenized_test_target_input_ids[j][tokenized_test_target_input_ids[j] == -100] = tokenizer.pad_token_id
         _labels = tokenizer.batch_decode(tokenized_test_target_input_ids[j], skip_special_tokens=True)
+        print(_labels[:5])
         test_loss.append(loss.item())
 
         src = tokenizer.batch_decode(tokenized_test_source_input_ids[j], skip_special_tokens=True)
